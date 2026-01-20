@@ -1,0 +1,319 @@
+---
+name: Continuous Integration
+on:
+  workflow_call:
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on:
+      ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout Bicep Module
+        uses: actions/checkout@v4
+
+      - name: Install Bicep and Update Az Module
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-installer@main
+
+      - name: Bicep Build & Lint All Modules
+        shell: pwsh
+        run: |
+          $output = @()
+          Get-ChildItem -Recurse -Filter '*.bicep' -Exclude '*.bicep' | Where-Object { $_.FullName -notlike "*\.bicep\*" } | ForEach-Object {
+              Write-Information "==> Attempting Bicep Build For File: $_" -InformationAction Continue
+              $bicepOutput = bicep build $_.FullName 2>&1
+              if ($LastExitCode -ne 0)
+              {
+                foreach ($item in $bicepOutput) {
+                  $output += "$($item) `r`n"
+                }
+              }
+              else
+              {
+                echo "Bicep Build Successful for File: $_"
+              }
+          }
+          if ($output.length -gt 0) {
+            throw $output
+          }
+
+  whatif:
+    name: What If
+    runs-on:
+      ubuntu-latest
+    concurrency: mgmt-tfstate
+    environment: cmalz-mgmt-plan
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PARAMETERS_FILE_NAME: parameters.json
+
+    steps:
+      - name: Checkout Bicep Module
+        uses: actions/checkout@v4
+
+      - name: Get Bicep Variables
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-variables@main
+        with:
+          parameters_file_name: ${{ env.PARAMETERS_FILE_NAME }}
+
+      - name: Install Bicep and Update Az Module
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-installer@main
+
+      - name: OIDC Login to Tenant
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Check for First Deployment
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-first-deployment-check@main
+        with:
+          managementGroupId: ${{ env.MANAGEMENT_GROUP_ID }}
+
+      - name: 'What If: Governance-Intermediate Root'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-int-root'
+          displayName: 'Governance-Intermediate Root'
+          templateFilePath: 'templates/core/governance/mgmt-groups/int-root/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/int-root/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Landing Zones'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-landingzones'
+          displayName: 'Governance-Landing Zones'
+          templateFilePath: 'templates/core/governance/mgmt-groups/landingzones/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/landingzones/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Landing Zones Corp'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-landingzones-corp'
+          displayName: 'Governance-Landing Zones Corp'
+          templateFilePath: 'templates/core/governance/mgmt-groups/landingzones/landingzones-corp/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/landingzones/landingzones-corp/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Landing Zones Online'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-landingzones-online'
+          displayName: 'Governance-Landing Zones Online'
+          templateFilePath: 'templates/core/governance/mgmt-groups/landingzones/landingzones-online/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/landingzones/landingzones-online/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform'
+          displayName: 'Governance-Platform'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform Connectivity'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-connectivity'
+          displayName: 'Governance-Platform Connectivity'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/platform-connectivity/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/platform-connectivity/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform Identity'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-identity'
+          displayName: 'Governance-Platform Identity'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/platform-identity/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/platform-identity/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform Management'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-management'
+          displayName: 'Governance-Platform Management'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/platform-management/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/platform-management/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform Security'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-security'
+          displayName: 'Governance-Platform Security'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/platform-security/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/platform-security/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Sandbox'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-sandbox'
+          displayName: 'Governance-Sandbox'
+          templateFilePath: 'templates/core/governance/mgmt-groups/sandbox/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/sandbox/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Decommissioned'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-decommissioned'
+          displayName: 'Governance-Decommissioned'
+          templateFilePath: 'templates/core/governance/mgmt-groups/decommissioned/main.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/decommissioned/main.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform RBAC'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-rbac'
+          displayName: 'Governance-Platform RBAC'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/main-rbac.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/main-rbac.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Platform Connectivity RBAC'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-platform-connectivity-rbac'
+          displayName: 'Governance-Platform Connectivity RBAC'
+          templateFilePath: 'templates/core/governance/mgmt-groups/platform/platform-connectivity/main-rbac.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/platform/platform-connectivity/main-rbac.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Governance-Landing Zones RBAC'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'governance-landingzones-rbac'
+          displayName: 'Governance-Landing Zones RBAC'
+          templateFilePath: 'templates/core/governance/mgmt-groups/landingzones/main-rbac.bicep'
+          templateParametersFilePath: 'templates/core/governance/mgmt-groups/landingzones/main-rbac.bicepparam'
+          managementGroupId: '${{ env.MANAGEMENT_GROUP_ID }}'
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'managementGroup'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Core-Logging'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'core-logging'
+          displayName: 'Core-Logging'
+          templateFilePath: 'templates/core/logging/main.bicep'
+          templateParametersFilePath: 'templates/core/logging/main.bicepparam'
+          managementGroupId: ''
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_MANAGEMENT }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'subscription'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
+      - name: 'What If: Networking-Hub Networking'
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
+        with:
+          name: 'networking-hubnetworking'
+          displayName: 'Networking-Hub Networking'
+          templateFilePath: 'templates/networking/hubnetworking/main.bicep'
+          templateParametersFilePath: 'templates/networking/hubnetworking/main.bicepparam'
+          managementGroupId: ''
+          subscriptionId: '${{ env.SUBSCRIPTION_ID_CONNECTIVITY }}'
+          resourceGroupName: ''
+          location: '${{ env.LOCATION }}'
+          deploymentType: 'subscription'
+          firstRunWhatIf: 'false'
+          whatIfEnabled: 'true'
+
