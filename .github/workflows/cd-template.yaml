@@ -357,13 +357,23 @@ jobs:
           whatIfEnabled: 'true'
 
   # ============================================================
+  # Approval Gate (single approval unlocks all deploy jobs)
+  # ============================================================
+  approve:
+    name: 'Approve Deployment'
+    runs-on: ubuntu-latest
+    environment: cmalz-mgmt-apply
+    steps:
+      - run: echo "Deployment approved"
+
+  # ============================================================
   # Deploy Wave 1: Governance Root (must deploy first)
   # ============================================================
   deploy-governance-root:
     name: 'Deploy: Governance Root'
-    if: ${{ inputs.governance-int-root }}
+    needs: approve
+    if: ${{ always() && !failure() && !cancelled() && inputs.governance-int-root }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -402,7 +412,6 @@ jobs:
     needs: deploy-governance-root
     if: ${{ always() && !failure() && !cancelled() }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -485,7 +494,6 @@ jobs:
     needs: deploy-governance-parents
     if: ${{ always() && !failure() && !cancelled() && (inputs.governance-landingzones-corp || inputs.governance-landingzones-online) }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -540,7 +548,6 @@ jobs:
     needs: deploy-governance-parents
     if: ${{ always() && !failure() && !cancelled() && (inputs.governance-platform-connectivity || inputs.governance-platform-identity || inputs.governance-platform-management || inputs.governance-platform-security) }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -623,7 +630,6 @@ jobs:
     needs: [deploy-governance-children-lz, deploy-governance-children-platform]
     if: ${{ always() && !failure() && !cancelled() && (inputs.governance-platform-rbac || inputs.governance-platform-connectivity-rbac || inputs.governance-landingzones-rbac) }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -692,7 +698,6 @@ jobs:
     needs: deploy-governance-root
     if: ${{ always() && !failure() && !cancelled() && inputs.core-logging }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
@@ -732,7 +737,6 @@ jobs:
     needs: [deploy-core, deploy-governance-parents]
     if: ${{ always() && !failure() && !cancelled() && inputs.networking-hubnetworking }}
     runs-on: ubuntu-latest
-    environment: cmalz-mgmt-apply
     permissions:
       id-token: write
       contents: read
