@@ -65,7 +65,8 @@ This enumeration was hitting ARM API rate limits and adding 2-5 minutes per step
 | Metric | Before | After (estimated) |
 |--------|--------|--------------------|
 | CI wall time | 60-80 min (what-if timeouts) | ~1-2 min (validate only) |
-| CD deploy wall time | 60-90 min | ~30-40 min |
+| CD deploy wall time (full run) | 60-90 min | ~30-40 min |
+| CD deploy wall time (targeted) | 60-90 min (always full) | ~5-15 min (path-based change detection) |
 | ARM API calls per run | ~17 × (enumerate + batch delete) | 0 cleanup calls |
 | GitHub Actions runners | 2 concurrent | Up to 8 concurrent (CD) / 1 (CI) |
 
@@ -74,3 +75,43 @@ This enumeration was hitting ARM API rate limits and adding 2-5 minutes per step
 - `.github/workflows/cd-template.yaml` — Parallel deploy jobs with dependency DAG; `skip_what_if` defaults to `true`
 - `.github/workflows/ci-template.yaml` — Removed all what-if jobs, CI is now validate-only
 - `.github/actions/bicep-deploy/action.yaml` — Removed deployment cleanup blocks
+
+---
+
+### Caller Workflow: Path-Based Change Detection (`cmalz-mgmt` repo)
+
+The caller `cd.yaml` in the `cmalz-mgmt` repo now includes a **`detect-changes`** job that uses [`dorny/paths-filter@v3`](https://github.com/dorny/paths-filter) to compare the push commit against the previous commit. Only deployment groups whose templates actually changed are sent to the reusable workflow as `true`.
+
+**On push to main** — change detection runs automatically and skips unchanged deployment groups.
+
+**On workflow_dispatch** — change detection is skipped entirely and the manual input toggles control which jobs run (all default to `true`).
+
+#### Path Filter Mapping
+
+| Filter group | Triggers when these paths change |
+|---|---|
+| `governance-int-root` | `templates/core/governance/mgmt-groups/int-root/**` |
+| `governance-landingzones` | `templates/core/governance/mgmt-groups/landingzones/main.bicep`, `main.bicepparam` |
+| `governance-landingzones-children` | `landingzones-corp/**`, `landingzones-online/**` |
+| `governance-platform` | `templates/core/governance/mgmt-groups/platform/main.bicep`, `main.bicepparam` |
+| `governance-platform-children` | `platform-connectivity/**`, `platform-identity/**`, `platform-management/**`, `platform-security/**` |
+| `governance-sandbox` | `templates/core/governance/mgmt-groups/sandbox/**` |
+| `governance-decommissioned` | `templates/core/governance/mgmt-groups/decommissioned/**` |
+| `governance-rbac` | `**/main-rbac.bicep`, `**/main-rbac.bicepparam` |
+| `core` | `templates/core/logging/**` |
+| `networking` | `templates/networking/**` |
+
+> **Shared files** — Every filter group also triggers on changes to `parameters.json`, `bicepconfig.json`, `templates/core/alzCoreType.bicep`, and `templates/core/governance/lib/**` (the ALZ policy library), since these are consumed by all or most templates.
+
+#### Example
+
+A PR that only changes `templates/networking/hubnetworking/main.bicep` will result in:
+
+- `networking` → `true` (only this group deploys)
+- All governance and core groups → `false` (skipped)
+
+This avoids unnecessary ARM round-trips for unchanged stacks, saving several minutes of runner time per deployment.
+
+#### Files Changed (caller repo `cmalz-mgmt`)
+
+- `.github/workflows/cd.yaml` — Added `detect-changes` job; `plan_and_apply` wired to use path filter outputs on push, manual inputs on dispatch; `skip_what_if` defaults to `true`
