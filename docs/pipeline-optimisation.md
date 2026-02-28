@@ -33,17 +33,17 @@ whatif (single validation job)
 
 ### CI Template (`ci-template.yaml`)
 
-Split the single `whatif` job (17 sequential what-if checks) into **3 parallel jobs**:
+Removed all ARM what-if jobs from CI entirely. The what-if checks were consistently timing out (60+ minutes) due to Azure ARM API limitations with management group scope deployments — particularly the `int-root` template which evaluates the entire management group hierarchy.
 
-| Job | What-If Steps | Description |
-|-----|---------------|-------------|
-| `whatif-governance` | 8 | Root, parent MGs, LZ children, Platform children (connectivity, identity) |
-| `whatif-governance-rbac` | 7 | Platform mgmt/security, Sandbox, Decommissioned, all RBAC |
-| `whatif-infra` | 2 | Core logging, Hub networking |
+**Why this is safe:**
+- The `validate` job (`bicep build` + lint) catches syntax errors, type mismatches, and missing parameters in seconds
+- The CD pipeline's `whatif` job still runs a full ARM what-if before any real deployment
+- ARM what-if slowness is specific to the `New-Az*Deployment -WhatIf` diff engine — Deployment Stacks (`New-Az*DeploymentStack`) don't have this problem because they submit templates directly to ARM without computing a full before/after diff
 
-All 3 jobs run **simultaneously**, reducing wall-clock time from ~60+ minutes to ~25 minutes (limited by the slowest parallel job).
-
-Also removed `concurrency: mgmt-tfstate` from CI — what-if is read-only validation and doesn't need to block behind CD deployments.
+**CI now runs a single job:**
+| Job | Description | Duration |
+|-----|-------------|----------|
+| `validate` | `bicep build` + lint all `.bicep` files | ~1-2 min |
 
 ### Bicep Deploy Action (`bicep-deploy/action.yaml`)
 
@@ -63,13 +63,13 @@ This enumeration was hitting ARM API rate limits and adding 2-5 minutes per step
 
 | Metric | Before | After (estimated) |
 |--------|--------|--------------------|
-| CI what-if wall time | 60-80 min | ~20-25 min |
+| CI wall time | 60-80 min (what-if timeouts) | ~1-2 min (validate only) |
 | CD deploy wall time | 60-90 min | ~30-40 min |
 | ARM API calls per run | ~17 × (enumerate + batch delete) | 0 cleanup calls |
-| GitHub Actions runners | 2 concurrent | Up to 8 concurrent (CD) / 4 concurrent (CI) |
+| GitHub Actions runners | 2 concurrent | Up to 8 concurrent (CD) / 1 (CI) |
 
 ## Files Changed
 
 - `.github/workflows/cd-template.yaml` — Parallel deploy jobs with dependency DAG
-- `.github/workflows/ci-template.yaml` — 3 parallel what-if jobs
+- `.github/workflows/ci-template.yaml` — Removed all what-if jobs, CI is now validate-only
 - `.github/actions/bicep-deploy/action.yaml` — Removed deployment cleanup blocks
