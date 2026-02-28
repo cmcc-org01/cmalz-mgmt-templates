@@ -6,8 +6,7 @@ on:
 jobs:
   validate:
     name: Validate Bicep
-    runs-on:
-      ubuntu-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
 
@@ -40,11 +39,13 @@ jobs:
             throw $output
           }
 
-  whatif:
-    name: What If
-    runs-on:
-      ubuntu-latest
-    concurrency: mgmt-tfstate
+  # ============================================================
+  # What-If: Governance (root + parent MGs + children + RBAC)
+  # Runs in PARALLEL with whatif-infra
+  # ============================================================
+  whatif-governance:
+    name: 'What If: Governance'
+    runs-on: ubuntu-latest
     environment: cmalz-mgmt-plan
     permissions:
       id-token: write
@@ -182,6 +183,45 @@ jobs:
           firstRunWhatIf: 'false'
           whatIfEnabled: 'true'
 
+  # ============================================================
+  # What-If: Governance RBAC + remaining MGs
+  # Runs in PARALLEL with whatif-governance and whatif-infra
+  # ============================================================
+  whatif-governance-rbac:
+    name: 'What If: Governance RBAC'
+    runs-on: ubuntu-latest
+    environment: cmalz-mgmt-plan
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PARAMETERS_FILE_NAME: parameters.json
+
+    steps:
+      - name: Checkout Bicep Module
+        uses: actions/checkout@v4
+
+      - name: Get Bicep Variables
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-variables@main
+        with:
+          parameters_file_name: ${{ env.PARAMETERS_FILE_NAME }}
+
+      - name: Install Bicep and Update Az Module
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-installer@main
+
+      - name: OIDC Login to Tenant
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Check for First Deployment
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-first-deployment-check@main
+        with:
+          managementGroupId: ${{ env.MANAGEMENT_GROUP_ID }}
+
       - name: 'What If: Governance-Platform Management'
         uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
         with:
@@ -286,6 +326,45 @@ jobs:
           deploymentType: 'managementGroup'
           firstRunWhatIf: 'false'
           whatIfEnabled: 'true'
+
+  # ============================================================
+  # What-If: Infrastructure (Core + Networking)
+  # Runs in PARALLEL with whatif-governance jobs
+  # ============================================================
+  whatif-infra:
+    name: 'What If: Infrastructure'
+    runs-on: ubuntu-latest
+    environment: cmalz-mgmt-plan
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      PARAMETERS_FILE_NAME: parameters.json
+
+    steps:
+      - name: Checkout Bicep Module
+        uses: actions/checkout@v4
+
+      - name: Get Bicep Variables
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-variables@main
+        with:
+          parameters_file_name: ${{ env.PARAMETERS_FILE_NAME }}
+
+      - name: Install Bicep and Update Az Module
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-installer@main
+
+      - name: OIDC Login to Tenant
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: true
+
+      - name: Check for First Deployment
+        uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-first-deployment-check@main
+        with:
+          managementGroupId: ${{ env.MANAGEMENT_GROUP_ID }}
 
       - name: 'What If: Core-Logging'
         uses: cmcc-org01/cmalz-mgmt-templates/.github/actions/bicep-deploy@main
