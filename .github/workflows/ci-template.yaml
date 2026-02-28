@@ -44,7 +44,6 @@ jobs:
     name: What If
     runs-on:
       ubuntu-latest
-    concurrency: mgmt-tfstate
     environment: cmalz-mgmt-plan
     permissions:
       id-token: write
