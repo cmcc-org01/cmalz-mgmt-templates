@@ -725,11 +725,11 @@ jobs:
           deploymentType: 'subscription'
 
   # ============================================================
-  # Deploy: Networking (after core + governance parents)
+  # Deploy: Networking (after core)
   # ============================================================
   deploy-networking:
     name: 'Deploy: Networking'
-    needs: [deploy-core, deploy-governance-parents]
+    needs: deploy-core
     if: ${{ always() && !failure() && !cancelled() && inputs.networking-hubnetworking }}
     runs-on: ubuntu-latest
     environment: cmalz-mgmt-apply
