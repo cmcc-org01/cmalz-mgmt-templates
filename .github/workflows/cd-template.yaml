@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       skip_what_if:
-        default: false
+        default: true
         type: boolean
       governance-int-root:
         type: boolean
@@ -361,8 +361,7 @@ jobs:
   # ============================================================
   deploy-governance-root:
     name: 'Deploy: Governance Root'
-    needs: whatif
-    if: ${{ always() && !failure() && !cancelled() && inputs.governance-int-root }}
+    if: ${{ inputs.governance-int-root }}
     runs-on: ubuntu-latest
     environment: cmalz-mgmt-apply
     permissions:
