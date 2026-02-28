@@ -67,33 +67,15 @@ This enumeration was hitting ARM API rate limits and adding 2-5 minutes per step
 | CI wall time | 60-80 min (what-if timeouts) | ~1-2 min (validate only) |
 | CD deploy wall time (full run) | 60-90 min | ~30-40 min |
 | CD deploy wall time (targeted) | 60-90 min (always full) | ~5-15 min (path-based change detection) |
-| CD approval clicks | 7 (one per deploy job) | 1 (single gate) |
+
 | ARM API calls per run | ~17 × (enumerate + batch delete) | 0 cleanup calls |
 | GitHub Actions runners | 2 concurrent | Up to 8 concurrent (CD) / 1 (CI) |
 
 ## Files Changed
 
-- `.github/workflows/cd-template.yaml` — Parallel deploy jobs with dependency DAG; `skip_what_if` defaults to `true`; single approval gate
+- `.github/workflows/cd-template.yaml` — Parallel deploy jobs with dependency DAG; `skip_what_if` defaults to `true`
 - `.github/workflows/ci-template.yaml` — Removed all what-if jobs, CI is now validate-only
 - `.github/actions/bicep-deploy/action.yaml` — Removed deployment cleanup blocks
-
----
-
-## Single Approval Gate
-
-Previously, every deploy job had `environment: cmalz-mgmt-apply`, which required a separate approval click for each of the 7 deploy jobs as they became ready. With 4 waves of deployment, this meant waiting and approving multiple times throughout the pipeline.
-
-Now a single `approve` job sits at the top of the deploy DAG:
-
-```
-approve (environment: cmalz-mgmt-apply)
-   └─ deploy-governance-root
-        ├─ deploy-governance-parents ──┬── deploy-governance-children-lz ──────┐
-        │                              └── deploy-governance-children-platform ┼─ deploy-governance-rbac
-        └─ deploy-core ──── deploy-networking
-```
-
-One approval unlocks the entire pipeline. The `whatif` job retains its own environment (`cmalz-mgmt-plan`) and is unaffected.
 
 ---
 
